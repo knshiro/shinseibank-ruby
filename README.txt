@@ -1,13 +1,12 @@
+# Shinseibank-ruby
+
 This is a Shinsei-bank PowerDirect (Shinsei-bank internet banking) library for Ruby.
 - http://www.shinseibank.com/
 
-作りかけ．残高は取れます．
+## Usage
 
-Require:
-
-
-Exapmple:
-
+Provide account number, password, pin code and the security card grid.
+```yaml
 # shinsei_account.yaml
 ID: "4009999999"
 PASS: "********"
@@ -18,10 +17,9 @@ GRID:
  - QWERTYUIOP
  - 1234567890
  - ZXCVBNMBNM
+```
 
-口座番号，パスワード，暗証番号とセキュリティーカードの情報を書いてください．
-
-
+```ruby
 # shinseipowerdirect_sample.rb
 #!/usr/bin/ruby -Ku
 # -*- encoding: utf-8 -*-
@@ -51,13 +49,22 @@ ensure
 end
 
 puts "ok"
+```
 
+### Transfer to a registered account
 
+```
+powerdirect.transfer_to_registered_account('registed_account_num', 50000)
+```
 
-登録済み口座に振り込む
+With remitter information:
+```
+powerdirect.transfer_to_registered_account('registed_account_num', 50000, remitter_info: 'YEY', remitter_info_pos: :after)
+```
 
- powerdirect.transfer_to_registered_account('registed_account_num', 50000)
- # TODO:将来的にconfirmメソッドで確定するようにする
+- TODO: Use the confirm method to confirm the transaction
+
+### Buy and sell funds
 
 投資信託を買う(すでに買ってあるやつを追加で)
 

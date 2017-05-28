@@ -16,7 +16,8 @@ class ShinseiPowerDirect
 
   def initialize(account = nil)
     @account_status = {:total=>nil}
-    @url = 'https://pdirect04.shinseibank.com/FLEXCUBEAt/LiveConnect.dll'
+    @base_url = 'https://pdirect04.shinseibank.com/FLEXCUBEAt'
+    @url = "#{@base_url}/LiveConnect.dll"
     ua = "Mozilla/5.0 (Windows; U; Windows NT 5.1;) PowerDirectBot/0.1"
     @client = HTTPClient.new(:agent_name => ua)
 
@@ -256,7 +257,7 @@ class ShinseiPowerDirect
   #
   # @param [string] name = target 7digit account num. TODO:口座番号被る可能性について考える
   # @param [int] amount < 2000000 ?
-  def transfer_to_registered_account name, amount
+  def transfer_to_registered_account name, amount, remitter_info: nil, remitter_info_pos: nil
 
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
@@ -321,21 +322,18 @@ class ShinseiPowerDirect
     from_name = values['fldRemitterName']
     account = @accounts.keys[0] # とりあえず普通円預金っぽいやつ
 
-    postdata = {
-      'MfcISAPICommand'=>'EntryFunc',
-      'fldAppID'=>'RT',
-      'fldTxnID'=>'ZNT',
-      'fldScrSeqNo'=>'07',
-      'fldRequestorID'=>'74',
-      'fldSessionID'=> @ssid,
+    if remitter_info
+      values['fldMemo'] = remitter_info_pos.to_sym == :after ? "#{from_name}#{remitter_info}" : "#{remitter_info}#{from_name}"
+      values['fldInvoicePosition'] = remitter_info_pos.to_sym == :after ? 'A' : 'B'
+      values['fldInvoice'] = remitter_info
+    else
+      values['fldMemo'] = from_name
+    end
 
+    values.merge!({
       'fldAcctId' => account,
       'fldAcctType' => @accounts[account][:type] ,
       'fldAcctDesc'=> @accounts[account][:desc],
-      'fldMemo'=> from_name,
-      #'fldRemitterName'=> '',
-      #'fldInvoice'=>'',
-      #'fldInvoicePosition'=>'B',
       'fldTransferAmount' => amount,
       'fldTransferType'=>'P', # P(registerd) or D
       #'fldPayeeId'=>'',
@@ -354,13 +352,19 @@ class ShinseiPowerDirect
       #fldSearchBranchName:
       #fldFlagRegister:
       #'fldDomFTLimit'=>'4000000',
-      #'fldRemReimburse'=>4,
-    }.merge(values)
+    })
 
+    postdata = {
+      'MfcISAPICommand'=>'EntryFunc',
+      'fldAppID'=>'RT',
+      'fldTxnID'=>'ZNT',
+      'fldScrSeqNo'=>'07',
+      'fldRequestorID'=>'74',
+      'fldSessionID'=> @ssid,
+    }.merge(values)
 
     res = @client.post(@url, postdata)
 
-    values= {}
     ['fldMemo', 'fldInvoicePosition', 'fldTransferType', 'fldTransferDate', 'fldTransferFeeUnformatted',
       'fldDebitAmountUnformatted', 'fldReimbursedAmt', 'fldRemReimburse'].each{|k|
       if res.body =~/#{k}=['"]([^'"]*)['"]/
@@ -375,33 +379,6 @@ class ShinseiPowerDirect
       'fldScrSeqNo'=>'08',
       'fldRequestorID'=>'76',
       'fldSessionID'=> @ssid,
-
-      'fldAcctId' => @accounts.keys[0],
-      'fldAcctType' => @accounts[ @accounts.keys[0] ][:type] ,
-      'fldAcctDesc'=> @accounts[ @accounts.keys[0] ][:desc],
-      #'fldMemo'=> from_name,
-      'fldRemitterName'=> target_account[:name],
-      #'fldInvoice'=>'',
-      #'fldInvoicePosition'=>'B',
-      'fldTransferAmount' => amount,
-      'fldTransferType'=>'P', # P(registerd) or D
-      #'fldTransferDate' => transfar_date,
-      #'fldPayeeId'=>'',
-      'fldPayeeName' => target_account[:name],
-      'fldPayeeAcctId' => target_account[:account_id],
-      'fldPayeeAcctType' => target_account[:account_type],
-      #fldPayeeBankCode:undefined
-      'fldPayeeBankName' => target_account[:bank],
-      'fldPayeeBankNameKana' => target_account[:bank_kana],
-      'fldPayeeBankNameKanji' => target_account[:bank_kanji],
-      #fldPayeeBranchCode:undefined
-      'fldPayeeBranchName' => target_account[:branch],
-      'fldPayeeBranchNameKana' => target_account[:branch_kana],
-      'fldPayeeBranchNameKanji' => target_account[:branch_kanji],
-      #fldSearchBankName:
-      #fldSearchBranchName:
-      #fldFlagRegister:
-      #'fldDomFTLimit'=>'4000000',
     }.merge(values)
 
     #p postdata
