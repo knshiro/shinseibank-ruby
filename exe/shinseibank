@@ -1,4 +1,4 @@
-#!/usr/bin/ruby -Ku
+#!/usr/bin/env ruby
 # -*- encoding: utf-8 -*-
 #
 #  新生銀行コマンドラインツール
@@ -8,10 +8,10 @@
 #
 
 require 'yaml'
-require_relative 'shinseipowerdirect'
+require 'shinseibank'
 
 shinsei_account = YAML.load_file('shinsei_account.yaml')
-powerdirect = ShinseiPowerDirect.new
+powerdirect = ShinseiBank.new
 
 if ARGV.length < 1
   puts "usage:  "

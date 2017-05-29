@@ -1,83 +1,41 @@
-# Shinseibank-ruby
+# Shinseibank
 
-This is a Shinsei-bank PowerDirect (Shinsei-bank internet banking) library for Ruby.
-- http://www.shinseibank.com/
+Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/shinseibank`. To experiment with that code, run `bin/console` for an interactive prompt.
+
+TODO: Delete this and the text above, and describe your gem
+
+## Installation
+
+Add this line to your application's Gemfile:
+
+```ruby
+gem 'shinseibank'
+```
+
+And then execute:
+
+    $ bundle
+
+Or install it yourself as:
+
+    $ gem install shinseibank
 
 ## Usage
 
-Provide account number, password, pin code and the security card grid.
-```yaml
-# shinsei_account.yaml
-ID: "4009999999"
-PASS: "********"
-NUM: "1234"
-GRID:
- - ZXCVBNMBNM
- - ASDFGHJKLL
- - QWERTYUIOP
- - 1234567890
- - ZXCVBNMBNM
-```
+TODO: Write usage instructions here
 
-```ruby
-# shinseipowerdirect_sample.rb
-#!/usr/bin/ruby -Ku
-# -*- encoding: utf-8 -*-
+## Development
 
-require 'yaml'
-require_relative 'shinseipowerdirect'
+After checking out the repo, run `bin/setup` to install dependencies. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
 
-shinsei_account = YAML.load_file('shinsei_account.yaml')
-powerdirect = ShinseiPowerDirect.new
+To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and tags, and push the `.gem` file to [rubygems.org](https://rubygems.org).
 
-# login
-unless powerdirect.login(shinsei_account)
-  puts 'LOGIN ERROR'
-  exit
-end
+## Contributing
 
-begin
-  puts 'total: ' + powerdirect.total_balance.to_s
-  powerdirect.recent.each do |row|
-    p row
-  end
-
-  p powerdirect.accounts
-ensure
-  # logout
-  powerdirect.logout
-end
-
-puts "ok"
-```
-
-### Transfer to a registered account
-
-```
-powerdirect.transfer_to_registered_account('registed_account_num', 50000)
-```
-
-With remitter information:
-```
-powerdirect.transfer_to_registered_account('registed_account_num', 50000, remitter_info: 'YEY', remitter_info_pos: :after)
-```
-
-- TODO: Use the confirm method to confirm the transaction
-
-### Buy and sell funds
-
-投資信託を買う(すでに買ってあるやつを追加で)
-
-  fund = powerdirect.funds[0]
-  req = powerdirect.buy_fund fund, 1000000
-  powerdirect.confitm req
-
-投資信託を解約
-
-  fund = powerdirect.funds[0]
-  req = powerdirect.sell_fund fund, 1230000
-  powerdirect.confitm req
+Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/shinseibank.
 
 
-あらゆる動作は無保証です．実装と動作をよく確認して使ってください．
+## License
+
+The gem is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
 
