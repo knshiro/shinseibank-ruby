@@ -723,6 +723,74 @@ class ShinseiPowerDirect
     funds
   end
 
+  def get_transfer_history
+    postdata = {
+      "MfcISAPICommand" => "EntryFunc",
+      "fldAppID" => "RT",
+      "fldTxnID" => "ZNI",
+      "fldScrSeqNo" => "00",
+      "fldRequestorID" => "90",
+      "fldSessionID" => @ssid,
+      "fldAcctID" => "",
+      "fldAccountType" => "",
+      "fldIncludeBal" => "Y",
+      "fldCurDef" => "JPY",
+      "fldCDCCode" => "",
+      "fldStartNum" => "0",
+      "fldEndNum" => "10",
+      "fldLink" => "",
+      "fldbRktnVisited" => "",
+      "fldCustCat" => "",
+      "fldCustAcctStatus" => "",
+    }
+    res = @client.post(@url, postdata)
+    body = res.body.toutf8
+
+    history = []
+
+    body.scan(/fldListDebitAcctID\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i] = {:origin=>m[2]}
+    }
+
+    body.scan(/fldListTxnAmount\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:amount] = m[2]
+    }
+
+    body.scan(/fldListTxnFee\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:fee] = m[2]
+    }
+
+    body.scan(/fldListPayeeAcctID\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:payee_account_id] = m[2]
+    }
+
+    body.scan(/fldListPayeeBnkBrn\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:payee_bank_branch] = m[2]
+    }
+
+    body.scan(/fldListDatValue\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:date] = m[2]
+    }
+
+    body.scan(/fldListPayeeName\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:payee_name] = m[2]
+    }
+
+    body.scan(/fldListRefSysTrAudNo\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:reference] = m[2]
+    }
+
+    body.scan(/fldListTxtRemarks1\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:remarks] = m[2]
+    }
+
+    body.scan(/fldListTxnStatus\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+        history[m[1].to_i][:status] = m[2]
+    }
+
+    history
+  end
+
   private
   def getgrid account, cell
     x = cell[0].tr('A-J', '0-9').to_i
