@@ -213,13 +213,8 @@ class ShinseiBank
     history[1..-1]
   end
 
-  ##
-  # transfer to registered account
-  #
-  # @param [string] name = target 7digit account num. TODO:口座番号被る可能性について考える
-  # @param [int] amount < 2000000 ?
-  def transfer_to_registered_account name, amount, remitter_info: nil, remitter_info_pos: nil
 
+  def list_registered_accounts
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
@@ -243,6 +238,24 @@ class ShinseiBank
       ['fldListPayeeBranchKanji', :branch_kanji],
       ['fldListPayeeBranchKana', :branch_kana],
     ])
+
+    @last_res = res
+    registered_accounts
+  end
+
+  def show_registered_accounts
+    list_registered_accounts.map { |e| e.each { |k,v| e[k] = v.toutf8 } }
+  end
+
+  ##
+  # transfer to registered account
+  #
+  # @param [string] name = target 7digit account num. TODO:口座番号被る可能性について考える
+  # @param [int] amount < 2000000 ?
+  def transfer_to_registered_account name, amount, remitter_info: nil, remitter_info_pos: nil
+
+    registered_accounts = list_registered_accounts
+    res = @last_res
 
     values= {}
     ['fldRemitterName', 'fldInvoice', 'fldInvoicePosition','fldDomFTLimit', 'fldRemReimburse'].each{|k|
