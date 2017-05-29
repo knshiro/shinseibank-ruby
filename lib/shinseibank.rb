@@ -10,6 +10,7 @@ require "shinseibank/version"
 require 'kconv'
 require 'time'
 require 'shinseibank/httpclient'
+require 'yaml'
 
 class ShinseiBank
 
@@ -36,8 +37,13 @@ class ShinseiBank
   # ログイン
   #
   # @param [Hash] account アカウント情報(see shinsei_account.yaml.sample)
-  def login(account)
-    @account = account
+  def login(account = 'shinsei_account.yaml')
+
+    if account.is_a?(String)
+      @account = YAML.load_file(account)
+    elsif account.is_a?(Hash)
+      @account = account
+    end
 
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
@@ -47,9 +53,9 @@ class ShinseiBank
       'fldRequestorID'=>'41',
       'fldDeviceID'=>'01',
       'fldLangID'=>'JPN',
-      'fldUserID'=>account['ID'],
-      'fldUserNumId'=>account['NUM'],
-      'fldUserPass'=>account['PASS'],
+      'fldUserID'=> @account['ID'],
+      'fldUserNumId'=> @account['NUM'],
+      'fldUserPass'=> @account['PASS'],
       'fldRegAuthFlag'=>'A'
     }
 
@@ -73,16 +79,16 @@ class ShinseiBank
       'fldSessionID'=> @ssid,
       'fldDeviceID'=>'01',
       'fldLangID'=>'JPN',
-      'fldGridChallange1'=>getgrid(account, values['fldGridChallange1']),
-      'fldGridChallange2'=>getgrid(account, values['fldGridChallange2']),
-      'fldGridChallange3'=>getgrid(account, values['fldGridChallange3']),
+      'fldGridChallange1'=>getgrid(@account, values['fldGridChallange1']),
+      'fldGridChallange2'=>getgrid(@account, values['fldGridChallange2']),
+      'fldGridChallange3'=>getgrid(@account, values['fldGridChallange3']),
       'fldUserID'=>'',
       'fldUserNumId'=>'',
       'fldNumSeq'=>'1',
       'fldRegAuthFlag'=>values['fldRegAuthFlag'],
     }
 
-    res = @client.post(@url, postdata)
+    @client.post(@url, postdata)
 
     get_accounts
   end
