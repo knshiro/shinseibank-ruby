@@ -211,7 +211,7 @@ class ShinseiPowerDirect
       'fldStartNum'=>'0',
       'fldEndNum'=>'0',
       'fldCurDef'=>'JPY',
-      'fldPeriod'=>'1'
+      'fldPeriod'=> (from && too) ? "2" : "1"
     }
 
     #p postdata
