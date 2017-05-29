@@ -21,6 +21,10 @@ class ShinseiPowerDirect
     ua = "Mozilla/5.0 (Windows; U; Windows NT 5.1;) PowerDirectBot/0.1"
     @client = HTTPClient.new(:agent_name => ua)
 
+    @toutf8 = lambda { |v| v.toutf8 }
+    @parse_i = lambda { |v| v.gsub(/[,\.]/,'').to_i }
+    @parse_f = lambda { |v| v.gsub(/,/,'').to_f }
+
     if account
       login(account)
     end
@@ -97,8 +101,7 @@ class ShinseiPowerDirect
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
-
+    @client.post(@url, postdata)
   end
 
   ##
@@ -138,58 +141,30 @@ class ShinseiPowerDirect
     res = @client.post(@url, postdata)
     #puts res.body
 
-    accountid=[]
-    accounts = {}
-    res.body.scan(/fldAccountID\[(\d+)\]="(\w+)"/) { m = Regexp.last_match
-        accountid[m[1].to_i] = m[2]
-        accounts[m[2]] = {:id=>m[2]}
-    }
+    accounts = parse_array(res.body, [
+      ['fldAccountID', :id],
+      ['fldAccountType', :type],
+      ['fldAccountDesc', :description, @toutf8],
+      ['fldCurrCcy', :currency],
+      ['fldCurrBalance', :balance, @parse_f],
+      ['fldBaseBalance', :base_balance, @parse_f],
+    ])
 
-    res.body.scan(/fldAccountType\[(\d+)\]="(\w+)"/) { m = Regexp.last_match
-        accounts[accountid[m[1].to_i]][:type] = m[2]
-    }
+    @accounts = accounts.map { |e| [e[:id], e] }.to_h
 
-    res.body.scan(/fldAccountDesc\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        accounts[accountid[m[1].to_i]][:desc] = m[2].toutf8
-    }
+    @funds = parse_array(res.body, [
+      ['fldFundNameLCYArray', :name, @toutf8],
+      ['fldUnitsLCYArray', :holding, @parse_i],
+      ['fldUnitsLCYArray', :base_curr, @parse_f],
+      ['fldYenEqvLCYArray', :current_nav, @parse_f],
+    ])
 
-    res.body.scan(/fldCurrCcy\[(\d+)\]="(\w+)"/) { m = Regexp.last_match
-        accounts[accountid[m[1].to_i]][:curr] = m[2]
-    }
-
-    res.body.scan(/fldCurrBalance\[(\d+)\]="([\w\.,]+)"/) { m = Regexp.last_match
-        accounts[accountid[m[1].to_i]][:balance] = m[2].gsub(/,/,'').to_f
-    }
-
-    res.body.scan(/fldBaseBalance\[(\d+)\]="([\w\.,]+)"/) { m = Regexp.last_match
-        accounts[accountid[m[1].to_i]][:base_balance] = m[2].gsub(/,/,'').to_f
-    }
-
-    funds = []
-    res.body.scan(/fldFundNameLCYArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        funds[m[1].to_i] = { name: m[2].toutf8 }
-    }
-    res.body.scan(/fldUnitsLCYArray\[(\d+)\]="([\w\.,]+)"/) { m = Regexp.last_match
-        funds[m[1].to_i][:holding] = m[2].gsub(/,/,'').to_i
-    }
-    res.body.scan(/fldNAVLCYArray\[(\d+)\]="([\w\.,]+)"/) { m = Regexp.last_match
-        funds[m[1].to_i][:base_curr] = m[2].gsub(/,/,'').to_f
-    }
-    res.body.scan(/fldYenEqvLCYArray\[(\d+)\]="([\w\.,]+)"/) { m = Regexp.last_match
-        funds[m[1].to_i][:current_nav] = m[2].gsub(/,/,'').to_f
-    }
-    @funds = funds
-
-
-
-    total = "0"
+    total = 0
     if res.body =~/fldGrandTotalCR="([\d\.,]+)"/
       total = $1.gsub(/,/,'').to_i
     end
 
-    @accounts = accounts
     @account_status = {:total=>total}
-
   end
 
   def get_history from,to,id
@@ -217,36 +192,14 @@ class ShinseiPowerDirect
     #p postdata
     res = @client.post(@url, postdata)
 
-    history = []
-
-    res.body.scan(/fldDate\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i] = {:date=>m[2]}
-    }
-
-    res.body.scan(/fldDesc\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:description] = m[2].toutf8
-    }
-
-    res.body.scan(/fldRefNo\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:ref_no] = m[2]
-    }
-
-    res.body.scan(/fldDRCRFlag\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:drcr] = m[2]
-    }
-
-    res.body.scan(/fldAmount\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:amount] = m[2].gsub(/[,\.]/,'').to_i
-        if history[m[1].to_i][:drcr] == 'D'
-          history[m[1].to_i][:out] = m[2].gsub(/[,\.]/,'').to_i
-        else
-          history[m[1].to_i][:in] = m[2].gsub(/[,\.]/,'').to_i
-        end
-    }
-
-    res.body.scan(/fldRunningBalanceRaw\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:balance] = m[2].gsub(/,/,'').to_i
-    }
+    history = parse_array(res.body, [
+      ['fldDate', :date],
+      ['fldDesc', :description, @toutf8 ],
+      ['fldRefNo', :ref_no],
+      ['fldDRCRFlag', :type, lambda { |v| v == 'D' ? :debit : :credit } ],
+      ['fldAmount', :amount, @parse_i ],
+      ['fldRunningBalanceRaw', :balance, @parse_i ],
+    ])
 
     @account_status = {:total=>history[0][:amount], :id=>id}
     history[1..-1]
@@ -271,45 +224,17 @@ class ShinseiPowerDirect
     #p postdata
     res = @client.post(@url, postdata)
 
-    registered_account = []
-
-    res.body.scan(/fldListPayeeAcctId\[(\d+)\]="([^"]+)"/).each{|m|
-        registered_account[m[0].to_i] = {:account_id=>m[1]}
-    }
-
-    res.body.scan(/fldListPayeeAcctType\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:account_type] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeName\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:name] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeBank\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:bank] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeBankKanji\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:bank_kanji] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeBankKana\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:bank_kana] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeBranch\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:branch] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeBranchKanji\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:branch_kanji] = m[2]
-    }
-
-    res.body.scan(/fldListPayeeBranchKana\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        registered_account[m[1].to_i][:branch_kana] = m[2]
-    }
-
-    #p registered_account
+    registered_accounts = parse_array(res.body, [
+      ['fldListPayeeAcctId', :account_id],
+      ['fldListPayeeAcctType', :account_type],
+      ['fldListPayeeName', :name],
+      ['fldListPayeeBank', :bank],
+      ['fldListPayeeBankKanji', :bank_kanji],
+      ['fldListPayeeBankKana', :bank_kana],
+      ['fldListPayeeBranch', :branch],
+      ['fldListPayeeBranchKanji', :branch_kanji],
+      ['fldListPayeeBranchKana', :branch_kana],
+    ])
 
     values= {}
     ['fldRemitterName', 'fldInvoice', 'fldInvoicePosition','fldDomFTLimit', 'fldRemReimburse'].each{|k|
@@ -318,7 +243,7 @@ class ShinseiPowerDirect
       end
     }
 
-    target_account = registered_account.find{|a| a[:account_id] == name  };
+    target_account = registered_accounts.find{|a| a[:account_id] == name  };
     from_name = values['fldRemitterName']
     account = @accounts.keys[0] # とりあえず普通円預金っぽいやつ
 
@@ -637,33 +562,15 @@ class ShinseiPowerDirect
     #p postdata
     res = @client.post(@url, postdata)
 
-    history = []
+    parse_array(res.body, [
+      ['fldTxnDateArray', :date],
+      ['fldDateAlloted', :alloc_date],
+      ['fldRefNoArray', :ref_no],
+      ['fldTxnTypeArray', :type],
+      ['fldAmountArray', :units, @parse_i ],
+      ['fldStlmntAmtFormatted', :amount, @parse_i ],
+    ])
 
-    res.body.scan(/fldTxnDateArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i] = {:date=>m[2]}
-    }
-
-    res.body.scan(/fldDateAlloted\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i] = {:alloc_date=>m[2]}
-    }
-
-    res.body.scan(/fldRefNoArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:ref_no] = m[2]
-    }
-
-    res.body.scan(/fldTxnTypeArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:type] = m[2].toutf8
-    }
-
-    res.body.scan(/fldAmountArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:units] = m[2].gsub(/[,\.]/,'').to_i
-    }
-
-    res.body.scan(/fldStlmntAmtFormatted\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:amount] = m[2].gsub(/,/,'').to_i
-    }
-
-    history
   end
 
   def all_funds
@@ -765,7 +672,7 @@ class ShinseiPowerDirect
     headers = [:date, :ref_no, :description, :debit, :credit, :balance]
     CSV.parse(csv, col_sep: "\t", headers: headers)
   end
-  
+
   def get_transfer_history
     postdata = {
       "MfcISAPICommand" => "EntryFunc",
@@ -789,49 +696,18 @@ class ShinseiPowerDirect
     res = @client.post(@url, postdata)
     body = res.body.toutf8
 
-    history = []
-
-    body.scan(/fldListDebitAcctID\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i] = {:origin=>m[2]}
-    }
-
-    body.scan(/fldListTxnAmount\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:amount] = m[2]
-    }
-
-    body.scan(/fldListTxnFee\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:fee] = m[2]
-    }
-
-    body.scan(/fldListPayeeAcctID\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:payee_account_id] = m[2]
-    }
-
-    body.scan(/fldListPayeeBnkBrn\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:payee_bank_branch] = m[2]
-    }
-
-    body.scan(/fldListDatValue\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:date] = m[2]
-    }
-
-    body.scan(/fldListPayeeName\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:payee_name] = m[2]
-    }
-
-    body.scan(/fldListRefSysTrAudNo\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:reference] = m[2]
-    }
-
-    body.scan(/fldListTxtRemarks1\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:remarks] = m[2]
-    }
-
-    body.scan(/fldListTxnStatus\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-        history[m[1].to_i][:status] = m[2]
-    }
-
-    history
+    parse_array(body, [
+      ['fldListDebitAcctID', :origin],
+      ['fldListTxnAmount', :amount],
+      ['fldListTxnFee', :fee],
+      ['fldListPayeeAcctID', :payee_account_id],
+      ['fldListPayeeBnkBrn', :payee_bank_branch],
+      ['fldListDatValue', :date],
+      ['fldListPayeeName', :payee_name],
+      ['fldListRefSysTrAudNo', :reference],
+      ['fldListTxtRemarks1', :remarks],
+      ['fldListTxnStatus', :status],
+    ])
   end
 
   private
@@ -840,6 +716,19 @@ class ShinseiPowerDirect
     y = cell[1].to_i
 
     account['GRID'][y][x]
+  end
+
+  def parse_array(body, keys)
+    res = []
+    keys.each do |k,v,bl|
+      bl ||= Proc.new { |m| m }
+      body.scan(/#{k}\[(\d+)\]="([^"]+)"/) do
+        m = Regexp.last_match
+        res[m[1].to_i] ||= {}
+        res[m[1].to_i][v] = bl.call(m[2])
+      end
+    end
+    res
   end
 
 end
