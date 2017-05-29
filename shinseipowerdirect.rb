@@ -723,6 +723,49 @@ class ShinseiPowerDirect
     funds
   end
 
+  def get_csv_statement(id: nil, from: nil, to: nil)
+    id ||= @accounts.keys.first
+
+    to ||= Date.today if from
+
+    if to && !from
+      raise ArgumentError.new("You need to provide a range start if you provide a range end.")
+    elsif from && from > to
+      raise ArgumentError.new("Invalid range.")
+    end
+
+    from = from.strftime("%Y%m%d") if from
+    to = to.strftime("%Y%m%d") if to
+
+    postdata = {
+      "MfcISAPICommand" => "EntryFunc",
+      "fldScrSeqNo" => "01",
+      "fldAppID" => "RT",
+      'fldSessionID'=> @ssid,
+      "fldTxnID" => "ACA",
+      "fldRequestorID" => "9",
+      "fldAcctID" => id.to_s,
+      "fldAcctType" => @accounts[id][:type],
+      "fldIncludeBal" => "N",
+      "fldStartDate" => from,
+      "fldEndDate" => to,
+      "fldStartNum" => "0",
+      "fldEndNum" => "0",
+      "fldCurDef" => "JPY",
+      "fldPeriod" => (from ? "2" : "1"),
+    }
+    res = @client.post(@url, postdata)
+
+    postdata["fldTxnID"] = "DAA"
+
+    res = @client.post(@url, postdata)
+    body = res.body.toutf8
+    csv = body.lines[9..-1].join
+    require "csv"
+    headers = [:date, :ref_no, :description, :debit, :credit, :balance]
+    CSV.parse(csv, col_sep: "\t", headers: headers)
+  end
+
   private
   def getgrid account, cell
     x = cell[0].tr('A-J', '0-9').to_i
