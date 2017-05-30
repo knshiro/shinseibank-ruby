@@ -1,7 +1,9 @@
 class ShinseiBank
   class CLI < Thor
     class Subcommand < Thor
-      class_option :credentials, required: true, type: :string
+      DEFAULT_CREDENTIALS_PATH = "./shinsei_bank.yaml".freeze
+
+      class_option :credentials, required: true, type: :string, aliases: "-c", default: DEFAULT_CREDENTIALS_PATH
 
       private
 
