@@ -10,41 +10,27 @@ require "shinseibank/version"
 require 'kconv'
 require 'time'
 require 'shinseibank/httpclient'
-require 'yaml'
 
 class ShinseiBank
-
   attr_reader :account_status, :accounts, :funds, :last_html
   attr_accessor :account
 
-  def initialize(account = nil)
-    @account_status = {:total=>nil}
-    @base_url = 'https://pdirect04.shinseibank.com/FLEXCUBEAt'
-    @url = "#{@base_url}/LiveConnect.dll"
-    ua = "Mozilla/5.0 (Windows; U; Windows NT 5.1;) PowerDirectBot/0.1"
-    @client = HTTPClient.new(:agent_name => ua)
+  URL = "https://pdirect04.shinseibank.com/FLEXCUBEAt/LiveConnect.dll".freeze
+  USER_AGENT = "Mozilla/5.0 (Windows; U; Windows NT 5.1;) PowerDirectBot/0.1".freeze
 
-    @toutf8 = lambda { |v| v.toutf8 }
-    @parse_i = lambda { |v| v.gsub(/[,\.]/,'').to_i }
-    @parse_f = lambda { |v| v.gsub(/,/,'').to_f }
+  def self.connect(account)
+    new(account).tap(&:login).tap(&:get_accounts)
+  end
 
-    if account
-      login(account)
-    end
+  def initialize(account)
+    @account = account
   end
 
   ##
   # ログイン
   #
   # @param [Hash] account アカウント情報(see shinsei_account.yaml.sample)
-  def login(account = 'shinsei_account.yaml')
-
-    if account.is_a?(String)
-      @account = YAML.load_file(account)
-    elsif account.is_a?(Hash)
-      @account = account
-    end
-
+  def login
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
@@ -59,7 +45,7 @@ class ShinseiBank
       'fldRegAuthFlag'=>'A'
     }
 
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     values= {}
     ['fldSessionID', 'fldGridChallange1', 'fldGridChallange2', 'fldGridChallange3', 'fldRegAuthFlag'].each{|k|
@@ -88,9 +74,7 @@ class ShinseiBank
       'fldRegAuthFlag'=>values['fldRegAuthFlag'],
     }
 
-    @client.post(@url, postdata)
-
-    get_accounts
+    post(postdata)
   end
 
   ##
@@ -109,7 +93,7 @@ class ShinseiBank
     }
 
     #p postdata
-    @client.post(@url, postdata)
+    post(postdata)
   end
 
   ##
@@ -146,25 +130,25 @@ class ShinseiBank
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
     #puts res.body
 
     accounts = parse_array(res.body, [
       ['fldAccountID', :id],
       ['fldAccountType', :type],
-      ['fldAccountDesc', :description, @toutf8],
+      ['fldAccountDesc', :description, Matchers::TOUTF8],
       ['fldCurrCcy', :currency],
-      ['fldCurrBalance', :balance, @parse_f],
-      ['fldBaseBalance', :base_balance, @parse_f],
+      ['fldCurrBalance', :balance, Matchers::PARSE_F],
+      ['fldBaseBalance', :base_balance, Matchers::PARSE_F],
     ])
 
     @accounts = accounts.map { |e| [e[:id], e] }.to_h
 
     @funds = parse_array(res.body, [
-      ['fldFundNameLCYArray', :name, @toutf8],
-      ['fldUnitsLCYArray', :holding, @parse_i],
-      ['fldUnitsLCYArray', :base_curr, @parse_f],
-      ['fldYenEqvLCYArray', :current_nav, @parse_f],
+      ['fldFundNameLCYArray', :name, Matchers::TOUTF8],
+      ['fldUnitsLCYArray', :holding, Matchers::PARSE_I],
+      ['fldUnitsLCYArray', :base_curr, Matchers::PARSE_F],
+      ['fldYenEqvLCYArray', :current_nav, Matchers::PARSE_F],
     ])
 
     total = 0
@@ -198,15 +182,15 @@ class ShinseiBank
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     history = parse_array(res.body, [
       ['fldDate', :date],
-      ['fldDesc', :description, @toutf8 ],
+      ['fldDesc', :description, Matchers::TOUTF8 ],
       ['fldRefNo', :ref_no],
       ['fldDRCRFlag', :type, lambda { |v| v == 'D' ? :debit : :credit } ],
-      ['fldAmount', :amount, @parse_i ],
-      ['fldRunningBalanceRaw', :balance, @parse_i ],
+      ['fldAmount', :amount, Matchers::PARSE_I ],
+      ['fldRunningBalanceRaw', :balance, Matchers::PARSE_I ],
     ])
 
     @account_status = {:total=>history[0][:amount], :id=>id}
@@ -225,7 +209,7 @@ class ShinseiBank
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     registered_accounts = parse_array(res.body, [
       ['fldListPayeeAcctId', :account_id],
@@ -309,7 +293,7 @@ class ShinseiBank
       'fldSessionID'=> @ssid,
     }.merge(values)
 
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     ['fldMemo', 'fldInvoicePosition', 'fldTransferType', 'fldTransferDate', 'fldTransferFeeUnformatted',
      'fldDebitAmountUnformatted', 'fldReimbursedAmt', 'fldRemReimburse'].each{|k|
@@ -328,7 +312,7 @@ class ShinseiBank
     }.merge(values)
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     @last_html = res.body
   end
@@ -372,7 +356,7 @@ class ShinseiBank
       'fldTkApplicable'=>'0',
     }
 
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     values = {}
     ['fldFundID', 'fldBuyType', 'fldBuyUnits', 'fldTxnCurr', 'fldPayMode', 'fldAcctID', 'fldAcctType', 'fldBankID',
@@ -428,7 +412,7 @@ class ShinseiBank
 
      # デバッグ用．確定しない
      #p postdata
-     #res = @client.post(@url, postdata)
+     #res = post(postdata)
      @last_html = res.body
 
      unless values['fldUnits']
@@ -458,7 +442,7 @@ class ShinseiBank
       'fldUHID'=>fund[:uhid],
       'fldTkApplicable'=>'0',
     }
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     acc= {}
     ['fldBankIDArray', 'fldBranchIDArray', 'fldAcctIDArray', 'fldAcctTypeArray', 'fldAcctCurrArray',
@@ -492,7 +476,7 @@ class ShinseiBank
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     values= {}
     ['fldEODRunning', 'fldTkApplicable', 'fldAllocationDate', 'fldPaymentDate', 'fldConfirmationDate',
@@ -536,7 +520,7 @@ class ShinseiBank
 
     # デバッグ用．確定しない
     #p postdata
-    #res = @client.post(@url, postdata)
+    #res = post(postdata)
     @last_html = res.body
 
     {:method => 'sell_fund' , :amount=>values['fldSettlementAmt'].gsub(',','').to_f,  :alloc_date => values['fldAllocationDate'], :postdata => postdata }
@@ -547,7 +531,7 @@ class ShinseiBank
   #
   # @param [Hash] data sell_fundやbuy_fundの結果
   def confirm data
-    res = @client.post(@url, data[:postdata])
+    res = post(data[:postdata])
     @last_html = res.body
   end
 
@@ -581,15 +565,15 @@ class ShinseiBank
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     parse_array(res.body, [
       ['fldTxnDateArray', :date],
       ['fldDateAlloted', :alloc_date],
       ['fldRefNoArray', :ref_no],
       ['fldTxnTypeArray', :type],
-      ['fldAmountArray', :units, @parse_i ],
-      ['fldStlmntAmtFormatted', :amount, @parse_i ],
+      ['fldAmountArray', :units, Matchers::PARSE_I ],
+      ['fldStlmntAmtFormatted', :amount, Matchers::PARSE_I ],
     ])
 
   end
@@ -613,7 +597,7 @@ class ShinseiBank
     }
 
     #p postdata
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     uhids = []
     res.body.scan(/fldTopUHIDArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
@@ -682,11 +666,11 @@ class ShinseiBank
       "fldCurDef" => "JPY",
       "fldPeriod" => (from ? "2" : "1"),
     }
-    res = @client.post(@url, postdata)
+    res = post(postdata)
 
     postdata["fldTxnID"] = "DAA"
 
-    res = @client.post(@url, postdata)
+    res = post(postdata)
     body = res.body.toutf8
     csv = body.lines[9..-1].join
     require "csv"
@@ -714,7 +698,7 @@ class ShinseiBank
       "fldCustCat" => "",
       "fldCustAcctStatus" => "",
     }
-    res = @client.post(@url, postdata)
+    res = post(postdata)
     body = res.body.toutf8
 
     parse_array(body, [
@@ -732,11 +716,18 @@ class ShinseiBank
   end
 
   private
+
   def getgrid account, cell
     x = cell[0].tr('A-J', '0-9').to_i
     y = cell[1].to_i
 
     account['GRID'][y][x]
+  end
+
+  module Matchers
+    PARSE_I = lambda { |v| v.gsub(/[,\.]/,'').to_i }.freeze
+    PARSE_F = lambda { |v| v.gsub(/,/,'').to_f }.freeze
+    TOUTF8 = lambda { |v| v.toutf8 }.freeze
   end
 
   def parse_array(body, keys)
@@ -752,4 +743,7 @@ class ShinseiBank
     res
   end
 
+  def post(data)
+    HTTPClient.new(agent_name: USER_AGENT).post(URL, data)
+  end
 end

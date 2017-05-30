@@ -2,4 +2,4 @@
 
 require "shinseibank/cli"
 
-ShinseiBank::CLI.start(ARGV)
+ShinseiBank::CLI::Main.start(ARGV)

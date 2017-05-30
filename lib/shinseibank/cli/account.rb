@@ -1,15 +1,16 @@
 require "ostruct"
 require "shinseibank/cli/subcommand"
+require "pry-byebug"
 
 class ShinseiBank
-  class CLI < Thor
+  module CLI
     class Account < Subcommand
       desc "show", "Show your account details"
       def show
-        login
         non_empty_accounts.each do |account|
           puts format_account(account)
         end
+        logout
       end
 
       desc "history [ACCOUNT_ID]", "Display the transaction history of an account (defaults to the first checkings account)"
@@ -21,7 +22,7 @@ class ShinseiBank
       private
 
         def non_empty_accounts
-          shinseibank.accounts.values.select do |account|
+          shinsei_bank.accounts.values.select do |account|
             account[:balance] > 0
           end
         end

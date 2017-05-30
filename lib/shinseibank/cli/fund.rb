@@ -1,7 +1,7 @@
 require "shinseibank/cli/subcommand"
 
 class ShinseiBank
-  class CLI < Thor
+  module CLI
     class Fund < Subcommand
     end
   end
