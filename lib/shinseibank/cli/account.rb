@@ -54,7 +54,7 @@ class ShinseiBank
           [
             transaction[:date].to_s.ljust(10),
             transaction[:ref_no].to_s.ljust(10),
-            pad_zenkaku(transaction[:description], 40),
+            pad_zenkaku(transaction[:description], 50),
             transaction[:debit].to_s.rjust(10),
             transaction[:credit].to_s.rjust(10),
             transaction[:balance].to_s.rjust(12),
