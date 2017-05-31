@@ -3,7 +3,7 @@ require "yaml"
 class ShinseiBank
   module CLI
     class Subcommand < Thor
-      DEFAULT_CREDENTIALS_PATH = "./shinsei_bank.yaml".freeze
+      DEFAULT_CREDENTIALS_PATH = "./shinsei_account.yaml".freeze
 
       class_option :credentials, type: :string, aliases: "-c", default: DEFAULT_CREDENTIALS_PATH
 
