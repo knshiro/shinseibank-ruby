@@ -1,6 +1,5 @@
 require "ostruct"
 require "shinseibank/cli/subcommand"
-require "pry-byebug"
 
 class ShinseiBank
   module CLI

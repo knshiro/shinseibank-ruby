@@ -45,11 +45,11 @@ class ShinseiBank
       'fldRegAuthFlag'=>'A'
     }
 
-    res = post(postdata)
+    body = post(postdata)
 
     values= {}
     ['fldSessionID', 'fldGridChallange1', 'fldGridChallange2', 'fldGridChallange3', 'fldRegAuthFlag'].each{|k|
-      if res.body =~/#{k}=['"](\w+)['"]/
+      if body =~/#{k}=['"](\w+)['"]/
         values[k] = $1
       end
     }
@@ -104,12 +104,8 @@ class ShinseiBank
     @account_status[:total]
   end
 
-  ##
-  # 直近の取引履歴(円口座)
-  #
-  # @return [Array] 履歴の配列
-  def recent
-    get_history nil, nil, @accounts.keys[0]
+  def get_history(from: nil, to: nil, id: nil)
+    get_csv_statement(from: from, to: to, id: id).map(&:to_h)
   end
 
   def get_accounts
@@ -130,13 +126,13 @@ class ShinseiBank
     }
 
     #p postdata
-    res = post(postdata)
+    body = post(postdata)
     #puts res.body
 
-    accounts = parse_array(res.body, [
+    accounts = parse_array(body, [
       ['fldAccountID', :id],
       ['fldAccountType', :type],
-      ['fldAccountDesc', :description, Matchers::TOUTF8],
+      ['fldAccountDesc', :description],
       ['fldCurrCcy', :currency],
       ['fldCurrBalance', :balance, Matchers::PARSE_F],
       ['fldBaseBalance', :base_balance, Matchers::PARSE_F],
@@ -144,59 +140,20 @@ class ShinseiBank
 
     @accounts = accounts.map { |e| [e[:id], e] }.to_h
 
-    @funds = parse_array(res.body, [
-      ['fldFundNameLCYArray', :name, Matchers::TOUTF8],
+    @funds = parse_array(body, [
+      ['fldFundNameLCYArray', :name],
       ['fldUnitsLCYArray', :holding, Matchers::PARSE_I],
       ['fldUnitsLCYArray', :base_curr, Matchers::PARSE_F],
       ['fldYenEqvLCYArray', :current_nav, Matchers::PARSE_F],
     ])
 
     total = 0
-    if res.body =~/fldGrandTotalCR="([\d\.,]+)"/
+    if body =~/fldGrandTotalCR="([\d\.,]+)"/
       total = $1.gsub(/,/,'').to_i
     end
 
     @account_status = {:total=>total}
   end
-
-  def get_history from,to,id
-
-    postdata = {
-      'MfcISAPICommand'=>'EntryFunc',
-      'fldAppID'=>'RT',
-      'fldTxnID'=>'ACA',
-      'fldScrSeqNo'=>'01',
-      'fldRequestorID'=>'9',
-      'fldSessionID'=> @ssid,
-
-      'fldAcctID'=> id, # 400????
-      'fldAcctType'=>@accounts[id][:type],
-      'fldIncludeBal'=>'N',
-
-      'fldStartDate'=> from ? from.strftime('%Y%m%d') : '',
-      'fldEndDate'=> to ? to.strftime('%Y%m%d') : '',
-      'fldStartNum'=>'0',
-      'fldEndNum'=>'0',
-      'fldCurDef'=>'JPY',
-      'fldPeriod'=> (from && too) ? "2" : "1"
-    }
-
-    #p postdata
-    res = post(postdata)
-
-    history = parse_array(res.body, [
-      ['fldDate', :date],
-      ['fldDesc', :description, Matchers::TOUTF8 ],
-      ['fldRefNo', :ref_no],
-      ['fldDRCRFlag', :type, lambda { |v| v == 'D' ? :debit : :credit } ],
-      ['fldAmount', :amount, Matchers::PARSE_I ],
-      ['fldRunningBalanceRaw', :balance, Matchers::PARSE_I ],
-    ])
-
-    @account_status = {:total=>history[0][:amount], :id=>id}
-    history[1..-1]
-  end
-
 
   def list_registered_accounts
     postdata = {
@@ -209,9 +166,9 @@ class ShinseiBank
     }
 
     #p postdata
-    res = post(postdata)
+    body = post(postdata)
 
-    registered_accounts = parse_array(res.body, [
+    registered_accounts = parse_array(body, [
       ['fldListPayeeAcctId', :account_id],
       ['fldListPayeeAcctType', :account_type],
       ['fldListPayeeName', :name],
@@ -223,12 +180,11 @@ class ShinseiBank
       ['fldListPayeeBranchKana', :branch_kana],
     ])
 
-    @last_res = res
     registered_accounts
   end
 
   def show_registered_accounts
-    list_registered_accounts.map { |e| e.each { |k,v| e[k] = v.toutf8 } }
+    list_registered_accounts.map { |e| e.each { |k,v| e[k] = v } }
   end
 
   ##
@@ -293,11 +249,11 @@ class ShinseiBank
       'fldSessionID'=> @ssid,
     }.merge(values)
 
-    res = post(postdata)
+    body = post(postdata)
 
     ['fldMemo', 'fldInvoicePosition', 'fldTransferType', 'fldTransferDate', 'fldTransferFeeUnformatted',
      'fldDebitAmountUnformatted', 'fldReimbursedAmt', 'fldRemReimburse'].each{|k|
-      if res.body =~/#{k}=['"]([^'"]*)['"]/
+      if body =~/#{k}=['"]([^'"]*)['"]/
         values[k] = $1
       end
     }
@@ -312,11 +268,8 @@ class ShinseiBank
     }.merge(values)
 
     #p postdata
-    res = post(postdata)
-
-    @last_html = res.body
+    post(postdata)
   end
-
 
   ##
   # 投資信託買う(実装中…)
@@ -356,7 +309,7 @@ class ShinseiBank
       'fldTkApplicable'=>'0',
     }
 
-    res = post(postdata)
+    body = post(postdata)
 
     values = {}
     ['fldFundID', 'fldBuyType', 'fldBuyUnits', 'fldTxnCurr', 'fldPayMode', 'fldAcctID', 'fldAcctType', 'fldBankID',
@@ -364,7 +317,7 @@ class ShinseiBank
      'fldCertReqd','fldGrossOrNet','fldSingleCert','fldAcctBalance', 'fldUserOverride','fldTkEnabled', 'fldMfTk',
      'fldTkApplicable','fldUHCategory','fldFCISDPRefNo','fldTransactionDate','fldAllocationDate', 'fldConfirmationDate', 'fldPreCalcFlag',
      'fldFeeAmount', 'fldTaxAmount', 'fldUnits'].each{|k|
-       if res.body =~/#{k}=['"]([^'"]*)['"]/
+       if body =~/#{k}=['"]([^'"]*)['"]/
          values[k] = $1
        end
      }
@@ -413,7 +366,6 @@ class ShinseiBank
      # デバッグ用．確定しない
      #p postdata
      #res = post(postdata)
-     @last_html = res.body
 
      unless values['fldUnits']
        return nil
@@ -442,12 +394,12 @@ class ShinseiBank
       'fldUHID'=>fund[:uhid],
       'fldTkApplicable'=>'0',
     }
-    res = post(postdata)
+    body = post(postdata)
 
     acc= {}
     ['fldBankIDArray', 'fldBranchIDArray', 'fldAcctIDArray', 'fldAcctTypeArray', 'fldAcctCurrArray',
      'fldDebitAmountUnformatted', 'fldReimbursedAmt', 'fldRemReimburse'].each{|k|
-      if res.body =~/#{k}\[0\]\[0\]=['"]([^'"]*)['"]/
+      if body =~/#{k}\[0\]\[0\]=['"]([^'"]*)['"]/
         acc[k] = $1
       end
     }
@@ -476,12 +428,12 @@ class ShinseiBank
     }
 
     #p postdata
-    res = post(postdata)
+    body = post(postdata)
 
     values= {}
     ['fldEODRunning', 'fldTkApplicable', 'fldAllocationDate', 'fldPaymentDate', 'fldConfirmationDate',
      'fldTransactionDate', 'fldFCISDPRefNo', 'fldSettlementAmt'].each{|k|
-      if res.body =~/#{k}=['"]([^'"]*)['"]/
+      if body =~/#{k}=['"]([^'"]*)['"]/
         values[k] = $1
       end
     }
@@ -521,7 +473,6 @@ class ShinseiBank
     # デバッグ用．確定しない
     #p postdata
     #res = post(postdata)
-    @last_html = res.body
 
     {:method => 'sell_fund' , :amount=>values['fldSettlementAmt'].gsub(',','').to_f,  :alloc_date => values['fldAllocationDate'], :postdata => postdata }
   end
@@ -531,8 +482,7 @@ class ShinseiBank
   #
   # @param [Hash] data sell_fundやbuy_fundの結果
   def confirm data
-    res = post(data[:postdata])
-    @last_html = res.body
+    post(data[:postdata])
   end
 
   def fund_history fund, from = nil, to = nil
@@ -565,9 +515,9 @@ class ShinseiBank
     }
 
     #p postdata
-    res = post(postdata)
+    body = post(postdata)
 
-    parse_array(res.body, [
+    parse_array(body, [
       ['fldTxnDateArray', :date],
       ['fldDateAlloted', :alloc_date],
       ['fldRefNoArray', :ref_no],
@@ -597,39 +547,37 @@ class ShinseiBank
     }
 
     #p postdata
-    res = post(postdata)
+    body = post(postdata)
 
     uhids = []
-    res.body.scan(/fldTopUHIDArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+    body.scan(/fldTopUHIDArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
                                                           uhids[m[1].to_i] = m[2]
     }
 
-
     funds = []
 
-    res.body.scan(/fldFundIDArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+    body.scan(/fldFundIDArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
                                                          funds[m[1].to_i] = {:id=>m[2], :uhid=>uhids[0]}
     }
 
-    res.body.scan(/fldFundNameArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-                                                           funds[m[1].to_i][:name] = m[2].toutf8
+    body.scan(/fldFundNameArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+                                                           funds[m[1].to_i][:name] = m[2]
     }
 
-    res.body.scan(/fldFundRiskLevel\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+    body.scan(/fldFundRiskLevel\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
                                                            funds[m[1].to_i][:risk_level] = m[2].to_i
     }
 
-    res.body.scan(/fldFundCategoryName\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-                                                              funds[m[1].to_i][:category_name] = m[2].toutf8
+    body.scan(/fldFundCategoryName\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+                                                              funds[m[1].to_i][:category_name] = m[2]
     }
 
-    res.body.scan(/fldFundCategory\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+    body.scan(/fldFundCategory\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
                                                           funds[m[1].to_i][:category] = m[2]
     }
 
-
-    res.body.scan(/fldFundURLArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
-                                                          funds[m[1].to_i][:url] = m[2].toutf8
+    body.scan(/fldFundURLArray\[(\d+)\]="([^"]+)"/) { m = Regexp.last_match
+                                                          funds[m[1].to_i][:url] = m[2]
     }
 
     funds
@@ -666,13 +614,11 @@ class ShinseiBank
       "fldCurDef" => "JPY",
       "fldPeriod" => (from ? "2" : "1"),
     }
-    res = post(postdata)
+    post(postdata)
 
     postdata["fldTxnID"] = "DAA"
 
-    res = post(postdata)
-    body = res.body.toutf8
-    csv = body.lines[9..-1].join
+    csv = post(postdata).lines[9..-1].join
     require "csv"
     headers = [:date, :ref_no, :description, :debit, :credit, :balance]
     CSV.parse(csv, col_sep: "\t", headers: headers)
@@ -698,8 +644,7 @@ class ShinseiBank
       "fldCustCat" => "",
       "fldCustAcctStatus" => "",
     }
-    res = post(postdata)
-    body = res.body.toutf8
+    body = post(postdata)
 
     parse_array(body, [
       ['fldListDebitAcctID', :origin],
@@ -727,7 +672,6 @@ class ShinseiBank
   module Matchers
     PARSE_I = lambda { |v| v.gsub(/[,\.]/,'').to_i }.freeze
     PARSE_F = lambda { |v| v.gsub(/,/,'').to_f }.freeze
-    TOUTF8 = lambda { |v| v.toutf8 }.freeze
   end
 
   def parse_array(body, keys)
@@ -744,6 +688,7 @@ class ShinseiBank
   end
 
   def post(data)
-    HTTPClient.new(agent_name: USER_AGENT).post(URL, data)
+    @last_res = HTTPClient.new(agent_name: USER_AGENT).post(URL, data)
+    @last_html = @last_res.body.toutf8
   end
 end
