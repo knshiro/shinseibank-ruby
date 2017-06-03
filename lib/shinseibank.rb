@@ -12,24 +12,23 @@ require 'time'
 require 'shinseibank/httpclient'
 
 class ShinseiBank
-  attr_reader :account_status, :accounts, :funds, :last_html
-  attr_accessor :account
+  attr_reader :credentials, :account_status, :accounts, :funds, :last_html
 
   URL = "https://pdirect04.shinseibank.com/FLEXCUBEAt/LiveConnect.dll".freeze
   USER_AGENT = "Mozilla/5.0 (Windows; U; Windows NT 5.1;) PowerDirectBot/0.1".freeze
 
-  def self.connect(account)
-    new(account).tap(&:login).tap(&:get_accounts)
-  end
-
-  def initialize(account)
-    @account = account
-  end
-
   ##
-  # ログイン
+  # Connect
   #
-  # @param [Hash] account アカウント情報(see shinsei_account.yaml.sample)
+  # @param [Hash] credentials アカウント情報(see shinsei_account.yaml.sample)
+  def self.connect(credentials)
+    new(credentials).tap(&:login).tap(&:get_accounts)
+  end
+
+  def initialize(credentials)
+    @credentials = credentials
+  end
+
   def login
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
@@ -39,9 +38,9 @@ class ShinseiBank
       'fldRequestorID'=>'41',
       'fldDeviceID'=>'01',
       'fldLangID'=>'JPN',
-      'fldUserID'=> @account['ID'],
-      'fldUserNumId'=> @account['NUM'],
-      'fldUserPass'=> @account['PASS'],
+      'fldUserID'=> credentials['ID'],
+      'fldUserNumId'=> credentials['NUM'],
+      'fldUserPass'=> credentials['PASS'],
       'fldRegAuthFlag'=>'A'
     }
 
@@ -65,9 +64,9 @@ class ShinseiBank
       'fldSessionID'=> @ssid,
       'fldDeviceID'=>'01',
       'fldLangID'=>'JPN',
-      'fldGridChallange1'=>getgrid(@account, values['fldGridChallange1']),
-      'fldGridChallange2'=>getgrid(@account, values['fldGridChallange2']),
-      'fldGridChallange3'=>getgrid(@account, values['fldGridChallange3']),
+      'fldGridChallange1'=>getgrid(values['fldGridChallange1']),
+      'fldGridChallange2'=>getgrid(values['fldGridChallange2']),
+      'fldGridChallange3'=>getgrid(values['fldGridChallange3']),
       'fldUserID'=>'',
       'fldUserNumId'=>'',
       'fldNumSeq'=>'1',
@@ -665,11 +664,11 @@ class ShinseiBank
 
   private
 
-  def getgrid account, cell
+  def getgrid(cell)
     x = cell[0].tr('A-J', '0-9').to_i
     y = cell[1].to_i
 
-    account['GRID'][y][x]
+    credentials['GRID'][y][x]
   end
 
   module Matchers
