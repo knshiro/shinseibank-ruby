@@ -38,9 +38,9 @@ class ShinseiBank
       'fldRequestorID'=>'41',
       'fldDeviceID'=>'01',
       'fldLangID'=>'JPN',
-      'fldUserID'=> credentials['ID'],
-      'fldUserNumId'=> credentials['NUM'],
-      'fldUserPass'=> credentials['PASS'],
+      'fldUserID'=> credentials["account"],
+      'fldUserNumId'=> credentials["pin"],
+      'fldUserPass'=> credentials["password"],
       'fldRegAuthFlag'=>'A'
     }
 
@@ -668,7 +668,7 @@ class ShinseiBank
     x = cell[0].tr('A-J', '0-9').to_i
     y = cell[1].to_i
 
-    credentials['GRID'][y][x]
+    credentials["code_card"][y][x]
   end
 
   module Matchers

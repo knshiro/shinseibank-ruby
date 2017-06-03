@@ -1,7 +1,7 @@
-ID: "4009999999"
-PASS: "********"
-NUM: "1234"
-GRID:
+account: "4009999999"
+password: "********"
+pin: "1234"
+code_card:
  - "ZXCVBNMBNM"
  - "ASDFGHJKLL"
  - "QWERTYUIOP"
