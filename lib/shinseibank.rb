@@ -593,7 +593,7 @@ class ShinseiBank
       raise ArgumentError.new("You need to provide a range start if you provide a range end.")
     elsif from && from > to
       raise ArgumentError.new("Invalid range.")
-    elsif from < (today - today.day + 1) << 24
+    elsif from && from < (today - today.day + 1) << 24
       raise ArgumentError.new("You can only go two years in the past.")
     end
 
