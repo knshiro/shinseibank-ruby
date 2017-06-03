@@ -586,15 +586,12 @@ class ShinseiBank
   def get_csv_statement(id: nil, from: nil, to: nil)
     id ||= @accounts.keys.first
 
-    today = Date.today
-    to ||= today if from
+    to ||= Date.today if from
 
     if to && !from
       raise ArgumentError.new("You need to provide a range start if you provide a range end.")
     elsif from && from > to
       raise ArgumentError.new("Invalid range.")
-    elsif from < (today - today.day + 1) << 24
-      raise ArgumentError.new("You can only go two years in the past.")
     end
 
     from = from.strftime("%Y%m%d") if from
