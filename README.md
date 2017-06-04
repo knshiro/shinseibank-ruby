@@ -23,33 +23,75 @@ Or install it yourself as:
 
 ## Usage
 
-Provide account number, password, pin code and the security card grid.
-```yaml
-# shinsei_account.yaml
-ID: "4009999999"
-PASS: "********"
-NUM: "1234"
-GRID:
- - ZXCVBNMBNM
- - ASDFGHJKLL
- - QWERTYUIOP
- - 1234567890
- - ZXCVBNMBNM
+### Command Line Interface
+
+```sh
+bundle exec exe/shinseibank --help
 ```
 
-```ruby
-#!/usr/bin/env ruby
-# -*- encoding: utf-8 -*-
-#
+There are multiple ways to pass credentials.
 
-require 'yaml'
+#### YAML file
+
+```yaml
+account: "4009999999"
+password: "********"
+pin: "1234"
+code_card:
+ - "ZXCVBNMBNM"
+ - "ASDFGHJKLL"
+ - "QWERTYUIOP"
+ - "1234567890"
+ - "ZXCVBNMBNM"
+```
+
+The CLI will load `./shinsei_account.yaml` by default, but you can pass your own
+credentials file using the `--credentials` option.
+
+#### Environment variables
+
+```sh
+SHINSEIBANK_ACCOUNT=4009999999
+SHINSEIBANK_PASSWORD=********
+SHINSEIBANK_PIN=1234
+SHINSEIBANK_CODE_CARD=ZXCVBNMBNM,ASDFGHJKLL,QWERTYUIOP,1234567890,ZXCVBNMBNM
+bundle exec exe/shinseibank --help
+```
+
+You can also use [`envchain`](https://github.com/sorah/envchain) to store these
+values securely.
+
+```sh
+brew install envchain
+
+envchain --set my-shinsei SHINSEIBANK_ACCOUNT SHINSEIBANK_PASSWORD SHINSEIBANK_PIN SHINSEIBANK_CODE_CARD
+# Here, set your credential values one by one.
+
+envchain my-shinsei bundle exec exe/shinseibank account show
+```
+
+### Library
+
+Provide account number, password, pin code and the security card grid.
+
+```ruby
 require_relative 'shinseibank'
 
-shinsei_account = YAML.load_file('shinsei_account.yaml')
-powerdirect = ShinseiBank.new
+powerdirect = ShinseiBank.connect(
+  account: "4009999999",
+  password: "********",
+  pin: "1234",
+  code_card: [
+    "ZXCVBNMBNM",
+    "ASDFGHJKLL",
+    "QWERTYUIOP",
+    "1234567890",
+    "ZXCVBNMBNM"
+  ]
+)
 
 # login
-unless powerdirect.login(shinsei_account)
+unless powerdirect
   puts 'LOGIN ERROR'
   exit
 end
