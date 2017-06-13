@@ -1,11 +1,10 @@
 require "ostruct"
+require "shinseibank/zenkaku_string"
 require "shinseibank/cli/subcommand"
 
 class ShinseiBank
   module CLI
     class Account < Subcommand
-      FULL_WIDTH_REGEXP = /[^ -~｡-ﾟ]/.freeze
-
       desc "show", "Show your account details"
       def show
         non_empty_accounts.each do |account|
@@ -54,21 +53,11 @@ class ShinseiBank
           [
             transaction[:date].to_s.ljust(10),
             transaction[:ref_no].to_s.ljust(10),
-            pad_zenkaku(transaction[:description], 50),
+            ZenkakuString.new(transaction[:description]).ljust(50),
             transaction[:debit].to_s.rjust(10),
             transaction[:credit].to_s.rjust(10),
             transaction[:balance].to_s.rjust(12),
           ].join(" | ")
-        end
-
-        def pad_zenkaku(string, to_length)
-          length = string.length + string.scan(FULL_WIDTH_REGEXP).count
-          padding = to_length - length
-          if padding >= 0
-            string + " " * padding
-          else
-            string
-          end
         end
 
         def from
