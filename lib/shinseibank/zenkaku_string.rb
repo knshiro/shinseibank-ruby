@@ -2,11 +2,11 @@ class ZenkakuString < String
   FULL_WIDTH_REGEXP = /[^ -~｡-ﾟ]/.freeze
 
   def ljust(to_length, padstr = " ")
-    super(adjusted_just_length(to_length), padstr)
+    self.class.new super(adjusted_just_length(to_length), padstr)
   end
 
   def rjust(to_length, padstr = " ")
-    super(adjusted_just_length(to_length), padstr)
+    self.class.new super(adjusted_just_length(to_length), padstr)
   end
 
   private
