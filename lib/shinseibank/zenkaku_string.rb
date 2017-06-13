@@ -1,33 +1,18 @@
 class ZenkakuString < String
   FULL_WIDTH_REGEXP = /[^ -~｡-ﾟ]/.freeze
 
-  def ljust(length, padstr = " ")
-    just(length, padstr, :left)
+  def ljust(to_length, padstr = " ")
+    self.class.new super(adjusted_just_length(to_length), padstr)
   end
 
-  def rjust(length, padstr = " ")
-    just(length, padstr, :right)
-  end
-
-  def width
-    length + full_width_count
+  def rjust(to_length, padstr = " ")
+    self.class.new super(adjusted_just_length(to_length), padstr)
   end
 
   private
 
-    def just(length, padstr, side)
-      raise ArgumentError.new unless %w(left right).include?(side.to_s)
-
-      padding_width = length - width
-      return self.dup unless padding_width > 0
-
-      padding = padstr * padding_width
-
-      if side.to_s == "left"
-        self + padding
-      else
-        padding + self
-      end
+    def adjusted_just_length(to_length)
+      [to_length - full_width_count, 0].max
     end
 
     def full_width_count
