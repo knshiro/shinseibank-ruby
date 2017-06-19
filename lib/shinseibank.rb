@@ -10,6 +10,7 @@ require "shinseibank/version"
 require 'kconv'
 require 'time'
 require 'shinseibank/httpclient'
+require 'shinseibank/request'
 
 class ShinseiBank
   attr_reader :credentials, :account_status, :accounts, :funds, :last_html
@@ -30,7 +31,8 @@ class ShinseiBank
   end
 
   def login
-    postdata = {
+    request = Request.new(
+      :post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'LGN',
@@ -42,20 +44,14 @@ class ShinseiBank
       'fldUserNumId'=> credentials["pin"],
       'fldUserPass'=> credentials["password"],
       'fldRegAuthFlag'=>'A'
-    }
+    )
 
-    body = post(postdata)
+    data = request.perform
 
-    values= {}
-    ['fldSessionID', 'fldGridChallange1', 'fldGridChallange2', 'fldGridChallange3', 'fldRegAuthFlag'].each{|k|
-      if body =~/#{k}=['"](\w+)['"]/
-        values[k] = $1
-      end
-    }
+    @ssid = data['fldSessionID']
 
-    @ssid = values['fldSessionID']
-
-    postdata = {
+    Request.new(
+      :post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'LGN',
@@ -64,22 +60,21 @@ class ShinseiBank
       'fldSessionID'=> @ssid,
       'fldDeviceID'=>'01',
       'fldLangID'=>'JPN',
-      'fldGridChallange1'=>getgrid(values['fldGridChallange1']),
-      'fldGridChallange2'=>getgrid(values['fldGridChallange2']),
-      'fldGridChallange3'=>getgrid(values['fldGridChallange3']),
+      'fldGridChallange1'=>getgrid(data['fldGridChallange1']),
+      'fldGridChallange2'=>getgrid(data['fldGridChallange2']),
+      'fldGridChallange3'=>getgrid(data['fldGridChallange3']),
       'fldUserID'=>'',
       'fldUserNumId'=>'',
       'fldNumSeq'=>'1',
-      'fldRegAuthFlag'=>values['fldRegAuthFlag'],
-    }
-
-    post(postdata)
+      'fldRegAuthFlag'=>data['fldRegAuthFlag'],
+    ).perform
   end
 
   ##
   # ログアウト
   def logout
-    postdata = {
+    Request.new(
+      :post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'CDC',
@@ -89,10 +84,9 @@ class ShinseiBank
 
       'fldIncludeBal'=>'Y',
       'fldCurDef'=>'JPY'
-    }
+    ).perform
 
-    #p postdata
-    post(postdata)
+    @ssid = nil
   end
 
   ##
@@ -108,8 +102,8 @@ class ShinseiBank
   end
 
   def get_accounts
-
-    postdata = {
+    data = Request.new(
+      :post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'ACS',
@@ -122,36 +116,34 @@ class ShinseiBank
       'fldIncludeBal'=>'Y',
       'fldPeriod'=>'',
       'fldCurDef'=>'JPY'
-    }
+    ).perform
 
-    #p postdata
-    body = post(postdata)
-    #puts res.body
+    @accounts = data["fldAccountID"].map.with_index do |id, index|
+      [
+        id,
+        {
+          id: id,
+          type: data["fldAccountType"][index],
+          description: data["fldAccountDesc"][index],
+          currency: data["fldCurrCcy"][index],
+          balance: data["fldCurrBalance"][index],
+          base_balance: data["fldBaseBalance"][index]
+        }
+      ]
+    end.to_h
 
-    accounts = parse_array(body, [
-      ['fldAccountID', :id],
-      ['fldAccountType', :type],
-      ['fldAccountDesc', :description],
-      ['fldCurrCcy', :currency],
-      ['fldCurrBalance', :balance, Matchers::PARSE_F],
-      ['fldBaseBalance', :base_balance, Matchers::PARSE_F],
-    ])
-
-    @accounts = accounts.map { |e| [e[:id], e] }.to_h
-
-    @funds = parse_array(body, [
-      ['fldFundNameLCYArray', :name],
-      ['fldUnitsLCYArray', :holding, Matchers::PARSE_I],
-      ['fldUnitsLCYArray', :base_curr, Matchers::PARSE_F],
-      ['fldYenEqvLCYArray', :current_nav, Matchers::PARSE_F],
-    ])
-
-    total = 0
-    if body =~/fldGrandTotalCR="([\d\.,]+)"/
-      total = $1.gsub(/,/,'').to_i
+    @funds = data["fldFundNameLCYArray"].map.with_index do |name, index|
+      {
+        name: name,
+        holding: data["fldUnitsLCYArray"][index],
+        base_curr: data["fldNAVLCYArray"][index],
+        current_nav: data["fldYenEqvLCYArray"][index]
+      }
     end
 
-    @account_status = {:total=>total}
+    @account_status = {
+      total: data.fetch("fldGrandTotalCR", 0)
+    }
   end
 
   def list_registered_accounts
