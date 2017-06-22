@@ -1,5 +1,5 @@
 require "shinseibank/cli/subcommand"
-require "shinseibank/zenkaku_string"
+require "shinseibank/display_string"
 
 class ShinseiBank
   module CLI
@@ -33,10 +33,10 @@ class ShinseiBank
           [
             transfer[:date].to_s.ljust(10),
             transfer[:reference].to_s.ljust(10),
-            ZenkakuString.new(transfer[:payee_name].to_s).ljust(30),
+            DisplayString.new(transfer[:payee_name].to_s).ljust_display(30),
             transfer[:payee_account_id].to_s.ljust(7),
             transfer[:amount].to_s.rjust(10),
-            ZenkakuString.new(transfer[:remarks].to_s).ljust(50),
+            DisplayString.new(transfer[:remarks].to_s).ljust_display(50),
             transfer[:fee].to_s.rjust(5),
             transfer[:status].to_s.ljust(10),
           ].join(" | ")

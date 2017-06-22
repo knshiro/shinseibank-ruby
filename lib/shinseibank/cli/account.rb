@@ -1,5 +1,5 @@
 require "ostruct"
-require "shinseibank/zenkaku_string"
+require "shinseibank/display_string"
 require "shinseibank/cli/subcommand"
 
 class ShinseiBank
@@ -53,7 +53,7 @@ class ShinseiBank
           [
             transaction[:date].to_s.ljust(10),
             transaction[:ref_no].to_s.ljust(10),
-            ZenkakuString.new(transaction[:description]).ljust(50),
+            DisplayString.new(transaction[:description]).ljust_display(50),
             transaction[:debit].to_s.rjust(10),
             transaction[:credit].to_s.rjust(10),
             transaction[:balance].to_s.rjust(12),
