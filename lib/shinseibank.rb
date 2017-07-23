@@ -7,16 +7,16 @@
 # @author binzume  http://www.binzume.net/
 
 require "shinseibank/version"
-require 'kconv'
 require 'time'
 require 'shinseibank/httpclient'
 require 'shinseibank/request'
+require "shinseibank/response"
+
+require "active_support"
+require "active_support/core_ext/hash/slice"
 
 class ShinseiBank
-  attr_reader :credentials, :account_status, :accounts, :funds, :last_html
-
-  URL = "https://pdirect04.shinseibank.com/FLEXCUBEAt/LiveConnect.dll".freeze
-  USER_AGENT = "Mozilla/5.0 (Windows; U; Windows NT 5.1;) PowerDirectBot/0.1".freeze
+  attr_reader :credentials, :account_status, :accounts, :funds
 
   ##
   # Connect
@@ -31,8 +31,7 @@ class ShinseiBank
   end
 
   def login
-    request = Request.new(
-      :post,
+    request = Request.new(:post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'LGN',
@@ -46,12 +45,11 @@ class ShinseiBank
       'fldRegAuthFlag'=>'A'
     )
 
-    data = request.perform
+    data = request.perform.js_data
 
     @ssid = data['fldSessionID']
 
-    Request.new(
-      :post,
+    Request.new(:post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'LGN',
@@ -67,14 +65,13 @@ class ShinseiBank
       'fldUserNumId'=>'',
       'fldNumSeq'=>'1',
       'fldRegAuthFlag'=>data['fldRegAuthFlag'],
-    ).perform
+    ).perform.js_data
   end
 
   ##
   # ログアウト
   def logout
-    Request.new(
-      :post,
+    Request.new(:post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'CDC',
@@ -102,8 +99,7 @@ class ShinseiBank
   end
 
   def get_accounts
-    data = Request.new(
-      :post,
+    request = Request.new(:post,
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
       'fldTxnID'=>'ACS',
@@ -116,7 +112,9 @@ class ShinseiBank
       'fldIncludeBal'=>'Y',
       'fldPeriod'=>'',
       'fldCurDef'=>'JPY'
-    ).perform
+    )
+
+    data = request.perform.js_data
 
     @accounts = data["fldAccountID"].map.with_index do |id, index|
       [
@@ -146,7 +144,7 @@ class ShinseiBank
     }
   end
 
-  def list_registered_accounts
+  def request_registered_accounts
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
       'fldAppID'=>'RT',
@@ -156,22 +154,25 @@ class ShinseiBank
       'fldSessionID'=> @ssid,
     }
 
-    #p postdata
-    body = post(postdata)
+    Request.new(:post, postdata).perform
+  end
 
-    registered_accounts = parse_array(body, [
-      ['fldListPayeeAcctId', :account_id],
-      ['fldListPayeeAcctType', :account_type],
-      ['fldListPayeeName', :name],
-      ['fldListPayeeBank', :bank],
-      ['fldListPayeeBankKanji', :bank_kanji],
-      ['fldListPayeeBankKana', :bank_kana],
-      ['fldListPayeeBranch', :branch],
-      ['fldListPayeeBranchKanji', :branch_kanji],
-      ['fldListPayeeBranchKana', :branch_kana],
-    ])
+  def extract_registered_accounts(response)
+    extract_list_of_hashes(response.js_data,
+      "fldListPayeeAcctId" => :account_id,
+      "fldListPayeeAcctType" => :account_type,
+      "fldListPayeeName" => :name,
+      "fldListPayeeBank" => :bank,
+      "fldListPayeeBankKanji" => :bank_kanji,
+      "fldListPayeeBankKana" => :bank_kana,
+      "fldListPayeeBranch" => :branch,
+      "fldListPayeeBranchKanji" => :branch_kanji,
+      "fldListPayeeBranchKana" => :branch_kana
+    )
+  end
 
-    registered_accounts
+  def list_registered_accounts
+    extract_registered_accounts(request_registered_accounts)
   end
 
   def show_registered_accounts
@@ -184,52 +185,11 @@ class ShinseiBank
   # @param [string] name = target 7digit account num. TODO:口座番号被る可能性について考える
   # @param [int] amount < 2000000 ?
   def transfer_to_registered_account name, amount, remitter_info: nil, remitter_info_pos: nil
-
-    registered_accounts = list_registered_accounts
-    res = @last_res
-
-    values= {}
-    ['fldRemitterName', 'fldInvoice', 'fldInvoicePosition','fldDomFTLimit', 'fldRemReimburse'].each{|k|
-      if res.body =~/#{k}=['"]([^'"]*)['"]/
-        values[k] = $1
-      end
-    }
-
-    target_account = registered_accounts.find{|a| a[:account_id] == name  };
-    from_name = values['fldRemitterName']
     account = @accounts.keys[0] # とりあえず普通円預金っぽいやつ
 
-    if remitter_info
-      values['fldMemo'] = remitter_info_pos.to_sym == :after ? "#{from_name}#{remitter_info}" : "#{remitter_info}#{from_name}"
-      values['fldInvoicePosition'] = remitter_info_pos.to_sym == :after ? 'A' : 'B'
-      values['fldInvoice'] = remitter_info
-    else
-      values['fldMemo'] = from_name
-    end
+    response = request_registered_accounts
 
-    values.merge!({
-      'fldAcctId' => account,
-      'fldAcctType' => @accounts[account][:type] ,
-      'fldAcctDesc'=> @accounts[account][:desc],
-      'fldTransferAmount' => amount,
-      'fldTransferType'=>'P', # P(registerd) or D
-      #'fldPayeeId'=>'',
-      'fldPayeeName' => target_account[:name],
-      'fldPayeeAcctId' => target_account[:account_id],
-      'fldPayeeAcctType' => target_account[:account_type],
-      #fldPayeeBankCode:undefined
-      'fldPayeeBankName' => target_account[:bank],
-      'fldPayeeBankNameKana' => target_account[:bank_kana],
-      'fldPayeeBankNameKanji' => target_account[:bank_kanji],
-      #fldPayeeBranchCode:undefined
-      'fldPayeeBranchName' => target_account[:branch],
-      'fldPayeeBranchNameKana' => target_account[:branch_kana],
-      'fldPayeeBranchNameKanji' => target_account[:branch_kanji],
-      #fldSearchBankName:
-      #fldSearchBranchName:
-      #fldFlagRegister:
-      #'fldDomFTLimit'=>'4000000',
-    })
+    registered_accounts = extract_registered_accounts(response)
 
     postdata = {
       'MfcISAPICommand'=>'EntryFunc',
@@ -238,28 +198,65 @@ class ShinseiBank
       'fldScrSeqNo'=>'07',
       'fldRequestorID'=>'74',
       'fldSessionID'=> @ssid,
-    }.merge(values)
-
-    body = post(postdata)
-
-    ['fldMemo', 'fldInvoicePosition', 'fldTransferType', 'fldTransferDate', 'fldTransferFeeUnformatted',
-     'fldDebitAmountUnformatted', 'fldReimbursedAmt', 'fldRemReimburse'].each{|k|
-      if body =~/#{k}=['"]([^'"]*)['"]/
-        values[k] = $1
-      end
+      'fldAcctId' => account,
+      'fldAcctType' => @accounts[account][:type] ,
+      'fldAcctDesc'=> @accounts[account][:desc],
+      'fldTransferAmount' => amount,
+      'fldTransferType'=>'P', # P(registerd) or D
     }
 
-    postdata = {
-      'MfcISAPICommand'=>'EntryFunc',
-      'fldAppID'=>'RT',
-      'fldTxnID'=>'ZNT',
-      'fldScrSeqNo'=>'08',
-      'fldRequestorID'=>'76',
-      'fldSessionID'=> @ssid,
-    }.merge(values)
+    postdata.merge!(
+      response.js_data.slice(
+        "fldRemitterName",
+        "fldInvoice",
+        "fldInvoicePosition",
+        "fldDomFTLimit",
+        "fldRemReimburse"
+      )
+    )
 
-    #p postdata
-    post(postdata)
+    target_account = registered_accounts.find{|a| a[:account_id] == name  };
+    from_name = response.js_data["fldRemitterName"]
+
+    if remitter_info
+      postdata['fldMemo'] = remitter_info_pos.to_sym == :after ? "#{from_name}#{remitter_info}" : "#{remitter_info}#{from_name}"
+      postdata['fldInvoicePosition'] = remitter_info_pos.to_sym == :after ? 'A' : 'B'
+      postdata['fldInvoice'] = remitter_info
+    else
+      postdata['fldMemo'] = from_name
+    end
+
+    postdata.merge!(
+      'fldPayeeName' => target_account[:name],
+      'fldPayeeAcctId' => target_account[:account_id],
+      'fldPayeeAcctType' => target_account[:account_type],
+      'fldPayeeBankName' => target_account[:bank],
+      'fldPayeeBankNameKana' => target_account[:bank_kana],
+      'fldPayeeBankNameKanji' => target_account[:bank_kanji],
+      'fldPayeeBranchName' => target_account[:branch],
+      'fldPayeeBranchNameKana' => target_account[:branch_kana],
+      'fldPayeeBranchNameKanji' => target_account[:branch_kanji]
+    )
+
+    data = Request.new(:post, postdata).perform.js_data
+
+    postdata.merge!(
+      data.slice(
+        "fldMemo",
+        "fldInvoicePosition",
+        "fldTransferType",
+        "fldTransferDate",
+        "fldTransferFeeUnformatted",
+        "fldDebitAmountUnformatted",
+        "fldReimbursedAmt",
+        "fldRemReimburse"
+      )
+    )
+
+    postdata["fldScrSeqNo"] = "08"
+    postdata["fldRequestorID"] = "76"
+
+    Request.new(:post, postdata).perform
   end
 
   ##
@@ -608,18 +605,19 @@ class ShinseiBank
       "fldCurDef" => "JPY",
       "fldPeriod" => (from ? "2" : "1"),
     }
-    post(postdata)
-
+    Request.new(:post, postdata).perform
     postdata["fldTxnID"] = "DAA"
 
-    csv = post(postdata).lines[9..-1].join
+    response = Request.new(:post, postdata).perform
+
+    csv = response.body.lines[9..-1].join
     require "csv"
     headers = [:date, :ref_no, :description, :debit, :credit, :balance]
     CSV.parse(csv, col_sep: "\t", headers: headers)
   end
 
   def get_transfer_history
-    postdata = {
+    request = Request.new(:post,
       "MfcISAPICommand" => "EntryFunc",
       "fldAppID" => "RT",
       "fldTxnID" => "ZNI",
@@ -637,21 +635,22 @@ class ShinseiBank
       "fldbRktnVisited" => "",
       "fldCustCat" => "",
       "fldCustAcctStatus" => "",
-    }
-    body = post(postdata)
+    )
 
-    parse_array(body, [
-      ['fldListDebitAcctID', :origin],
-      ['fldListTxnAmount', :amount],
-      ['fldListTxnFee', :fee],
-      ['fldListPayeeAcctID', :payee_account_id],
-      ['fldListPayeeBnkBrn', :payee_bank_branch],
-      ['fldListDatValue', :date],
-      ['fldListPayeeName', :payee_name],
-      ['fldListRefSysTrAudNo', :reference],
-      ['fldListTxtRemarks1', :remarks],
-      ['fldListTxnStatus', :status],
-    ])
+    data = request.perform.js_data
+
+    extract_list_of_hashes(data,
+      "fldListDebitAcctID" => :origin,
+      "fldListTxnAmount" => :amount,
+      "fldListTxnFee" => :fee,
+      "fldListPayeeAcctID" => :payee_account_id,
+      "fldListPayeeBnkBrn" => :payee_bank_branch,
+      "fldListDatValue" => :date,
+      "fldListPayeeName" => :payee_name,
+      "fldListRefSysTrAudNo" => :reference,
+      "fldListTxtRemarks1" => :remarks,
+      "fldListTxnStatus" => :status
+    )
   end
 
   private
@@ -663,26 +662,17 @@ class ShinseiBank
     credentials["code_card"][y][x]
   end
 
-  module Matchers
-    PARSE_I = lambda { |v| v.gsub(/[,\.]/,'').to_i }.freeze
-    PARSE_F = lambda { |v| v.gsub(/,/,'').to_f }.freeze
-  end
-
-  def parse_array(body, keys)
-    res = []
-    keys.each do |k,v,bl|
-      bl ||= Proc.new { |m| m }
-      body.scan(/#{k}\[(\d+)\]="([^"]+)"/) do
-        m = Regexp.last_match
-        res[m[1].to_i] ||= {}
-        res[m[1].to_i][v] = bl.call(m[2])
-      end
+  def extract_list_of_hashes(data, mappings)
+    if mappings.is_a?(Array)
+      mappings = mappings.zip(mappings).to_h
     end
-    res
-  end
 
-  def post(data)
-    @last_res = HTTPClient.new(agent_name: USER_AGENT).post(URL, data)
-    @last_html = @last_res.body.toutf8
+    mappings.inject([]) do |array, (old_key, new_key)|
+      data[old_key].each.with_index do |value, index|
+        array[index] ||= {}
+        array[index][new_key] = value
+      end
+      array
+    end
   end
 end
