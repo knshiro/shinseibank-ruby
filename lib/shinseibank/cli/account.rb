@@ -22,6 +22,7 @@ class ShinseiBank
         shinsei_bank.get_history(from: from, to: to, id: account_id).each do |tx|
           puts format_transaction(tx)
         end
+        logout
       end
 
       private

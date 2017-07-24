@@ -30,6 +30,7 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^exe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
+  spec.add_runtime_dependency "activesupport", "~> 5.1.1"
   spec.add_runtime_dependency "thor", "~> 0.19.0"
   spec.add_runtime_dependency "unicode-display_width", "~> 1.3.0"
 
